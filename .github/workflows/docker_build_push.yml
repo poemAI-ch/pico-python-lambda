@@ -35,7 +35,7 @@ jobs:
           IMAGE_BASE_NAME="${DOCKER_HUB_USERNAME}/${PROJECT_NAME}"
           echo "IMAGE_BASE_NAME=${IMAGE_BASE_NAME}"
           # Correct way to handle tag concatenation
-          PYTHON_ALPINE_TAG="${matrix.python_version}-alpine${matrix.alpine_version}"
+          PYTHON_ALPINE_TAG="${{ matrix.python_version }}-alpine${{ matrix.alpine_version }}"
           TAGS="${IMAGE_BASE_NAME}:${PYTHON_ALPINE_TAG},${IMAGE_BASE_NAME}:latest"
           echo "Building and pushing tags: $TAGS"
           docker buildx build --push \
