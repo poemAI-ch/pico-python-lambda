@@ -20,23 +20,23 @@ jobs:
         alpine_version: ['3.19', '3.20']
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Log in to Docker Hub
         run: echo "${{ env.DOCKER_HUB_TOKEN }}" | docker login -u "${{ env.DOCKER_HUB_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
         run: |
-          IMAGE_BASE_NAME="${{ env.DOCKER_HUB_USERNAME }}/${GITHUB_REPOSITORY#*/}"
+          PROJECT_NAME="${GITHUB_REPOSITORY#*/}"
+          COMMIT_HASH_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          IMAGE_BASE_NAME="${DOCKER_HUB_USERNAME}/${PROJECT_NAME}"
+          echo "IMAGE_BASE_NAME=${IMAGE_BASE_NAME}"
           TAGS="${IMAGE_BASE_NAME}:${matrix.python_version}-alpine${matrix.alpine_version}"
           TAGS="${TAGS},${IMAGE_BASE_NAME}:latest"
-
-          # Build and push multiple tags
           docker buildx build --push \
-            --tag $TAGS \
-            --build-arg PYTHON_VERSION=${{ matrix.python_version }} \
-            --build-arg ALPINE_VERSION=${{ matrix.alpine_version }} \
-            .
+             --tag $TAGS \
+             --build-arg PYTHON_VERSION=${{ matrix.python_version }} \
+             --build-arg ALPINE_VERSION=${{ matrix.alpine_version }}
