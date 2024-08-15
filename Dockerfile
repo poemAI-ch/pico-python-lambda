@@ -19,6 +19,9 @@ RUN pip install --upgrade pip && pip install awslambdaric
 # Final image
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS final
 
+# awslambdaric requires binutils
+RUN apk update && apk add binutils
+
 # Set up virtual environment
 RUN python3 -m venv /venv 
 ENV PATH="/venv/bin:$PATH"
