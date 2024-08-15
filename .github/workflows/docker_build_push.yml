@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python_version: ['3.11', '3.12']
-        alpine_version: ['3.19', '3.20']
+        python_version: ['3.12']
+        alpine_version: ['3.19']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
