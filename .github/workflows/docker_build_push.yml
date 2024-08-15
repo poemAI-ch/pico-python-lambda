@@ -40,6 +40,7 @@ jobs:
           echo "Building and pushing tags: $TAGS"
           docker buildx build --push \
             --tag $TAGS \
+            --platform linux/amd64,linux/arm64 \
             --build-arg PYTHON_VERSION=${{ matrix.python_version }} \
             --build-arg ALPINE_VERSION=${{ matrix.alpine_version }} \
             .
