@@ -1,0 +1,42 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+
+env:
+  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+  DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python_version: ['3.11', '3.12']
+        alpine_version: ['3.19', '3.20']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Log in to Docker Hub
+        run: echo "${{ env.DOCKER_HUB_TOKEN }}" | docker login -u "${{ env.DOCKER_HUB_USERNAME }}" --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_BASE_NAME="${{ env.DOCKER_HUB_USERNAME }}/${GITHUB_REPOSITORY#*/}"
+          TAGS="${IMAGE_BASE_NAME}:${matrix.python_version}-alpine${matrix.alpine_version}"
+          TAGS="${TAGS},${IMAGE_BASE_NAME}:latest"
+
+          # Build and push multiple tags
+          docker buildx build --push \
+            --tag $TAGS \
+            --build-arg PYTHON_VERSION=${{ matrix.python_version }} \
+            --build-arg ALPINE_VERSION=${{ matrix.alpine_version }} \
+            .
