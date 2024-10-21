@@ -88,12 +88,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Download digests
+      - name: Download digests for amd64
         uses: actions/download-artifact@v3
         with:
           name: digest-linux/amd64
           path: .
-      - name: Download digests
+
+      - name: Download digests for arm64
         uses: actions/download-artifact@v3
         with:
           name: digest-linux/arm64
@@ -111,7 +112,7 @@ jobs:
           digest_amd64=$(cat digest-linux/amd64.txt)
           digest_arm64=$(cat digest-linux/arm64.txt)
 
-          # Always combine the platforms into a manifest for each base image
+          # Combine the platforms into a manifest for each base image
           docker buildx imagetools create --tag $MAIN_TAG \
             ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
             ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
