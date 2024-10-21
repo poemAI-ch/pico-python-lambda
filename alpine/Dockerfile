@@ -1,10 +1,10 @@
 ARG PYTHON_VERSION=3.12
-ARG ALPINE_VERSION=3.19
+ARG BASE_IMAGE_VERSION=3.19
 
 FROM public.ecr.aws/lambda/python:${PYTHON_VERSION} AS aws_lambda_base
 
 
-FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS python_lambda_base
+FROM python:${PYTHON_VERSION}-alpine${BASE_IMAGE_VERSION} AS python_lambda_base
 
 # Install necessary packages
 RUN apk update && apk add --no-cache autoconf automake bash binutils cmake g++ gcc libtool make elfutils-dev
@@ -17,7 +17,7 @@ ENV PATH="/venv/bin:$PATH"
 RUN pip install --upgrade pip && pip install awslambdaric
 
 # Final image
-FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS final
+FROM python:${PYTHON_VERSION}-alpine${BASE_IMAGE_VERSION} AS final
 
 # awslambdaric requires binutils
 RUN apk update && apk add binutils

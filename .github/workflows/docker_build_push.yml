@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - '*'
+      - "*"
 
 env:
   DOCKER_HUB_USERNAME: ${{ vars.DOCKER_HUB_USERNAME }}
@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python_version: ['3.12']
-        alpine_version: ['3.19']
+        python_version: ["3.12"]
+        base_version: ["alpine-3.19", "ubuntu-22.04"] 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,17 +30,23 @@ jobs:
 
       - name: Build and push Docker image
         run: |
+          # Calculate the base image type and version
+          BASE_IMAGE_TYPE=$(echo "${{ matrix.base_version }}" | cut -d'-' -f1)
+          BASE_IMAGE_VERSION=$(echo "${{ matrix.base_version }}" | cut -d'-' -f2)
+          DOCKERFILE_DIR="${BASE_IMAGE_TYPE}"
           PROJECT_NAME="${GITHUB_REPOSITORY#*/}"
           COMMIT_HASH_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           IMAGE_BASE_NAME="${DOCKER_HUB_USERNAME}/${PROJECT_NAME}"
           echo "IMAGE_BASE_NAME=${IMAGE_BASE_NAME}"
-          # Correct way to handle tag concatenation
-          PYTHON_ALPINE_TAG="${{ matrix.python_version }}-alpine${{ matrix.alpine_version }}"
-          TAGS="${IMAGE_BASE_NAME}:${PYTHON_ALPINE_TAG}"
-          echo "Building and pushing tags: $TAGS"
+          OVERALL_TAG="${{ matrix.python_version }}-${{ matrix.base_version }}"
+          MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
+          LATEST_TAG="${IMAGE_BASE_NAME}:latest" # Optional: "${IMAGE_BASE_NAME}:latest-${BASE_IMAGE_TYPE}"
+
+          echo "Building and pushing tags: $MAIN_TAG"
           docker buildx build --push \
-            --tag $TAGS \
+            --tag $MAIN_TAG --tag $LATEST_TAG \
             --platform linux/amd64,linux/arm64 \
             --build-arg PYTHON_VERSION=${{ matrix.python_version }} \
-            --build-arg ALPINE_VERSION=${{ matrix.alpine_version }} \
+            --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
+            -f ${DOCKERFILE_DIR}/Dockerfile \
             .
