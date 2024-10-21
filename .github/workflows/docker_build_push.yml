@@ -62,7 +62,7 @@ jobs:
               --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
               -f ${DOCKERFILE_DIR}/Dockerfile \
               .
-
+          fi
           # Store the digest of the built image
           digest=$(docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2)
           echo "$digest" > digest-${{ matrix.platform }}.txt
@@ -122,3 +122,4 @@ jobs:
             docker buildx imagetools create --tag $LATEST_TAG \
               ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
               ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
+          fi
