@@ -16,6 +16,8 @@ jobs:
     parameters:
       base_version:
         type: string
+      docker_repo:
+        type: string
     steps:
       - checkout
       - setup_remote_docker  # Only needed for Docker executor
@@ -46,6 +48,8 @@ jobs:
     parameters:
       base_version:
         type: string
+      docker_repo:
+        type: string
     steps:
       - checkout
 
@@ -74,6 +78,8 @@ jobs:
       - image: cimg/python:3.12
     parameters:
       base_version:
+        type: string
+      docker_repo:
         type: string
     steps:
       - run:
@@ -142,3 +148,4 @@ workflows:
           requires:
             - Build Ubuntu AMD64
             - Build Ubuntu ARM64
+            
