@@ -18,7 +18,7 @@ jobs:
       matrix:
         python_version: ["3.12"]
         base_version: ["alpine-3.19", "ubuntu-22.04"]
-        platform: ["linux/amd64", "linux/arm64"]  # Added platform as a matrix dimension
+        platform: ["linux/amd64", "linux/arm64"]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,17 +44,28 @@ jobs:
           echo "IMAGE_BASE_NAME=${IMAGE_BASE_NAME}"
           OVERALL_TAG="${{ matrix.python_version }}-${{ matrix.base_version }}"
           MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
-          LATEST_TAG="${IMAGE_BASE_NAME}:latest"
 
-          echo "Building and pushing tags: $MAIN_TAG"
-          docker buildx build --push \
-            --tag $MAIN_TAG --platform ${{ matrix.platform }} \
-            --build-arg PYTHON_VERSION=${{ matrix.python_version }} \
-            --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
-            -f ${DOCKERFILE_DIR}/Dockerfile \
-            .
-          
-  # This second job combines the images into a multi-platform tag
+          # Tag 'latest' only for Alpine builds
+          if [[ "${{ matrix.base_version }}" == "alpine-"* ]]; then
+            LATEST_TAG="${IMAGE_BASE_NAME}:latest"
+            echo "Building and pushing tags: $MAIN_TAG and $LATEST_TAG"
+            docker buildx build --push \
+              --tag $MAIN_TAG --tag $LATEST_TAG --platform ${{ matrix.platform }} \
+              --build-arg PYTHON_VERSION=${{ matrix.python_version }} \
+              --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
+              -f ${DOCKERFILE_DIR}/Dockerfile \
+              .
+          else
+            echo "Building and pushing tag: $MAIN_TAG"
+            docker buildx build --push \
+              --tag $MAIN_TAG --platform ${{ matrix.platform }} \
+              --build-arg PYTHON_VERSION=${{ matrix.python_version }} \
+              --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
+              -f ${DOCKERFILE_DIR}/Dockerfile \
+              .
+          fi
+
+  # This second job combines the images into a multi-platform manifest
   create-manifest:
     needs: build
     runs-on: ubuntu-latest
@@ -76,13 +87,16 @@ jobs:
           IMAGE_BASE_NAME="${DOCKER_HUB_USERNAME}/${PROJECT_NAME}"
           OVERALL_TAG="${{ matrix.python_version }}-${{ matrix.base_version }}"
           MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
-          LATEST_TAG="${IMAGE_BASE_NAME}:latest"
 
-          # Create a multi-platform manifest for both platforms under the same tag
+          # Always combine the platforms into a manifest for each base image
           docker buildx imagetools create --tag $MAIN_TAG \
             ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/amd64 \
             ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/arm64
 
-          docker buildx imagetools create --tag $LATEST_TAG \
-            ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/amd64 \
-            ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/arm64
+          # Only create the 'latest' tag for Alpine builds
+          if [[ "${{ matrix.base_version }}" == "alpine-"* ]]; then
+            LATEST_TAG="${IMAGE_BASE_NAME}:latest"
+            docker buildx imagetools create --tag $LATEST_TAG \
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/amd64 \
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/arm64
+          fi
