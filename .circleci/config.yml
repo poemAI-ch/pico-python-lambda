@@ -10,26 +10,18 @@ executors:
       image: ubuntu-2004:2022.04  # Use machine executor for ARM64 builds (native ARM instances)
 
 jobs:
-  build:
+  build_amd64:
+    docker:
+      - image: circleci/python:3.12
     parameters:
-      platform:
-        type: string
       base_version:
         type: string
-
-    # Dynamically choose between the executors for ARM64 or AMD64
-    executor: "<< parameters.platform >>"
-
     steps:
       - checkout
+      - setup_remote_docker  # Only needed for Docker executor
 
       - run:
-          name: "Check if ARM64 requires setup_remote_docker"
-          when: << parameters.platform >> == "amd64-executor"
-          command: setup_remote_docker
-
-      - run:
-          name: Build Docker Image
+          name: Build Docker Image for AMD64
           command: |
             BASE_IMAGE_TYPE=$(echo "<< parameters.base_version >>" | cut -d'-' -f1)
             BASE_IMAGE_VERSION=$(echo "<< parameters.base_version >>" | cut -d'-' -f2)
@@ -38,8 +30,33 @@ jobs:
             OVERALL_TAG="3.12-<< parameters.base_version >>"
             MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
 
-            # Build the image (no push to Docker Hub)
-            docker buildx build --platform << parameters.platform >> --tag $MAIN_TAG \
+            # Build the image
+            docker buildx build --platform linux/amd64 --tag $MAIN_TAG \
+              --build-arg PYTHON_VERSION=3.12 \
+              --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
+              -f ${DOCKERFILE_DIR}/Dockerfile .
+
+  build_arm64:
+    machine:
+      image: ubuntu-2004:2022.04  # Native ARM64 machine
+    parameters:
+      base_version:
+        type: string
+    steps:
+      - checkout
+
+      - run:
+          name: Build Docker Image for ARM64
+          command: |
+            BASE_IMAGE_TYPE=$(echo "<< parameters.base_version >>" | cut -d'-' -f1)
+            BASE_IMAGE_VERSION=$(echo "<< parameters.base_version >>" | cut -d'-' -f2)
+            DOCKERFILE_DIR="${BASE_IMAGE_TYPE}"
+            IMAGE_BASE_NAME="test-build"
+            OVERALL_TAG="3.12-<< parameters.base_version >>"
+            MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
+
+            # Build the image
+            docker buildx build --platform linux/arm64 --tag $MAIN_TAG \
               --build-arg PYTHON_VERSION=3.12 \
               --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
               -f ${DOCKERFILE_DIR}/Dockerfile .
@@ -48,23 +65,19 @@ workflows:
   version: 2
   build_and_test:
     jobs:
-      - build:
+      - build_amd64:
           name: Build Alpine AMD64
-          platform: amd64-executor
           base_version: alpine-3.19
 
-      - build:
+      - build_arm64:
           name: Build Alpine ARM64
-          platform: arm64-executor
           base_version: alpine-3.19
 
-      - build:
+      - build_amd64:
           name: Build Ubuntu AMD64
-          platform: amd64-executor
           base_version: ubuntu-22.04
 
-      - build:
+      - build_arm64:
           name: Build Ubuntu ARM64
-          platform: arm64-executor
           base_version: ubuntu-22.04
           
