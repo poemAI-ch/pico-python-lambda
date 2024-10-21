@@ -1,0 +1,174 @@
+version: 2.1
+
+executors:
+  amd64-executor:
+    docker:
+      - image: cimg/python:3.12  # Use CircleCI's Docker image for amd64 builds
+
+  arm64-executor:
+    machine:
+      resource_class: arm.medium  # Use the correct resource class for ARM64
+
+jobs:
+  build_amd64:
+    docker:
+      - image: cimg/python:3.12
+    parameters:
+      base_version:
+        type: string
+      docker_repo:
+        type: string
+    steps:
+      - checkout
+      - setup_remote_docker  # Only needed for Docker executor
+
+      - run:
+          name: Log in to Docker Hub
+          command: echo "${DOCKER_HUB_TOKEN}" | docker login -u "${DOCKER_HUB_USERNAME}" --password-stdin
+
+      - run:
+          name: Build and Push Docker Image for AMD64
+          command: |
+            BASE_IMAGE_TYPE=$(echo "<< parameters.base_version >>" | cut -d'-' -f1)
+            BASE_IMAGE_VERSION=$(echo "<< parameters.base_version >>" | cut -d'-' -f2)
+            DOCKERFILE_DIR="${BASE_IMAGE_TYPE}"
+            IMAGE_BASE_NAME="<< parameters.docker_repo >>"
+            OVERALL_TAG="3.12-<< parameters.base_version >>"
+            MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
+
+            # Build and push the image to DockerHub
+            docker buildx build --push --platform linux/amd64 --tag $MAIN_TAG \
+              --build-arg PYTHON_VERSION=3.12 \
+              --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
+              -f ${DOCKERFILE_DIR}/Dockerfile .
+
+            # Capture the image digest and save it for later
+            docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2 > digest_amd64.txt
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - digest_amd64.txt
+
+  build_arm64:
+    machine:
+      resource_class: arm.medium  # Use the correct resource class for ARM64
+    parameters:
+      base_version:
+        type: string
+      docker_repo:
+        type: string
+    steps:
+      - checkout
+
+      - run:
+          name: Log in to Docker Hub
+          command: echo "${DOCKER_HUB_TOKEN}" | docker login -u "${DOCKER_HUB_USERNAME}" --password-stdin
+
+      - run:
+          name: Build and Push Docker Image for ARM64
+          command: |
+            BASE_IMAGE_TYPE=$(echo "<< parameters.base_version >>" | cut -d'-' -f1)
+            BASE_IMAGE_VERSION=$(echo "<< parameters.base_version >>" | cut -d'-' -f2)
+            DOCKERFILE_DIR="${BASE_IMAGE_TYPE}"
+            IMAGE_BASE_NAME="<< parameters.docker_repo >>"
+            OVERALL_TAG="3.12-<< parameters.base_version >>"
+            MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
+
+            # Build and push the image to DockerHub
+            docker buildx build --push --platform linux/arm64 --tag $MAIN_TAG \
+              --build-arg PYTHON_VERSION=3.12 \
+              --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
+              -f ${DOCKERFILE_DIR}/Dockerfile .
+
+            # Capture the image digest and save it for later
+            docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2 > digest_arm64.txt
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - digest_arm64.txt
+
+  create_manifest:
+    docker:
+      - image: cimg/python:3.12
+    parameters:
+      base_version:
+        type: string
+      docker_repo:
+        type: string
+    steps:
+      - attach_workspace:
+          at: .
+
+      - run:
+          name: Log in to Docker Hub
+          command: echo "${DOCKER_HUB_TOKEN}" | docker login -u "${DOCKER_HUB_USERNAME}" --password-stdin
+
+      - run:
+          name: Create and Push Multi-Platform Manifest
+          command: |
+            BASE_IMAGE_TYPE=$(echo "<< parameters.base_version >>" | cut -d'-' -f1)
+            IMAGE_BASE_NAME="<< parameters.docker_repo >>"
+            OVERALL_TAG="3.12-<< parameters.base_version >>"
+            MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
+
+            # Read the saved image digests
+            digest_amd64=$(cat digest_amd64.txt)
+            digest_arm64=$(cat digest_arm64.txt)
+
+            # Create and push the multi-platform manifest for this version (remove redundant 'sha256:')
+            docker buildx imagetools create --tag $MAIN_TAG \
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
+
+            # Only create the latest tag for Alpine builds
+            if [[ "<< parameters.base_version >>" == "alpine-"* ]]; then
+              LATEST_TAG="${IMAGE_BASE_NAME}:latest"
+              docker buildx imagetools create --tag $LATEST_TAG \
+                ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
+                ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
+            fi
+
+workflows:
+  version: 2
+  build_and_push:
+    jobs:
+      # Build and push images for AMD64 and ARM64
+      - build_amd64:
+          name: Build Alpine AMD64
+          base_version: alpine-3.19
+          docker_repo: empoemai/pico-python-lambda
+
+      - build_arm64:
+          name: Build Alpine ARM64
+          base_version: alpine-3.19
+          docker_repo: empoemai/pico-python-lambda
+
+      - build_amd64:
+          name: Build Ubuntu AMD64
+          base_version: ubuntu-22.04
+          docker_repo: empoemai/pico-python-lambda
+
+      - build_arm64:
+          name: Build Ubuntu ARM64
+          base_version: ubuntu-22.04
+          docker_repo: empoemai/pico-python-lambda
+
+      # Create and push multi-platform manifests
+      - create_manifest:
+          name: Create Manifest for Alpine
+          base_version: alpine-3.19
+          docker_repo: empoemai/pico-python-lambda
+          requires:
+            - Build Alpine AMD64
+            - Build Alpine ARM64
+
+      - create_manifest:
+          name: Create Manifest for Ubuntu
+          base_version: ubuntu-22.04
+          docker_repo: empoemai/pico-python-lambda
+          requires:
+            - Build Ubuntu AMD64
+            - Build Ubuntu ARM64
+            
