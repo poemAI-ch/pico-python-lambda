@@ -98,8 +98,6 @@ jobs:
       docker_repo:
         type: string
     steps:
-      - checkout
-
       - attach_workspace:
           at: .
 
@@ -119,17 +117,17 @@ jobs:
             digest_amd64=$(cat digest_amd64.txt)
             digest_arm64=$(cat digest_arm64.txt)
 
-            # Create and push the multi-platform manifest for this version
+            # Create and push the multi-platform manifest for this version (remove redundant 'sha256:')
             docker buildx imagetools create --tag $MAIN_TAG \
-              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@sha256:${digest_amd64} \
-              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@sha256:${digest_arm64}
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
 
             # Only create the latest tag for Alpine builds
             if [[ "<< parameters.base_version >>" == "alpine-"* ]]; then
               LATEST_TAG="${IMAGE_BASE_NAME}:latest"
               docker buildx imagetools create --tag $LATEST_TAG \
-                ${IMAGE_BASE_NAME}:${OVERALL_TAG}@sha256:${digest_amd64} \
-                ${IMAGE_BASE_NAME}:${OVERALL_TAG}@sha256:${digest_arm64}
+                ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
+                ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
             fi
 
 workflows:
