@@ -42,6 +42,14 @@ jobs:
               --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
               -f ${DOCKERFILE_DIR}/Dockerfile .
 
+            # Capture the image digest and save it for later
+            docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2 > digest_amd64.txt
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - digest_amd64.txt
+
   build_arm64:
     machine:
       resource_class: arm.medium  # Use the correct resource class for ARM64
@@ -73,6 +81,14 @@ jobs:
               --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
               -f ${DOCKERFILE_DIR}/Dockerfile .
 
+            # Capture the image digest and save it for later
+            docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2 > digest_arm64.txt
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - digest_arm64.txt
+
   create_manifest:
     docker:
       - image: cimg/python:3.12
@@ -82,6 +98,11 @@ jobs:
       docker_repo:
         type: string
     steps:
+      - checkout
+
+      - attach_workspace:
+          at: .
+
       - run:
           name: Log in to Docker Hub
           command: echo "${DOCKER_HUB_TOKEN}" | docker login -u "${DOCKER_HUB_USERNAME}" --password-stdin
@@ -94,17 +115,21 @@ jobs:
             OVERALL_TAG="3.12-<< parameters.base_version >>"
             MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
 
+            # Read the saved image digests
+            digest_amd64=$(cat digest_amd64.txt)
+            digest_arm64=$(cat digest_arm64.txt)
+
             # Create and push the multi-platform manifest for this version
             docker buildx imagetools create --tag $MAIN_TAG \
-              ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/amd64 \
-              ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/arm64
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@sha256:${digest_amd64} \
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@sha256:${digest_arm64}
 
             # Only create the latest tag for Alpine builds
             if [[ "<< parameters.base_version >>" == "alpine-"* ]]; then
               LATEST_TAG="${IMAGE_BASE_NAME}:latest"
               docker buildx imagetools create --tag $LATEST_TAG \
-                ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/amd64 \
-                ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/arm64
+                ${IMAGE_BASE_NAME}:${OVERALL_TAG}@sha256:${digest_amd64} \
+                ${IMAGE_BASE_NAME}:${OVERALL_TAG}@sha256:${digest_arm64}
             fi
 
 workflows:
