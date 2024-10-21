@@ -3,7 +3,7 @@ version: 2.1
 executors:
   amd64-executor:
     docker:
-      - image: circleci/python:3.12  # Use CircleCI's Docker image for amd64 builds
+      - image: cimg/python:3.12  # Correct CircleCI image for Python 3.12
 
   arm64-executor:
     machine:
@@ -12,7 +12,7 @@ executors:
 jobs:
   build_amd64:
     docker:
-      - image: circleci/python:3.12
+      - image: cimg/python:3.12  # Corrected Docker image for AMD64 builds
     parameters:
       base_version:
         type: string
