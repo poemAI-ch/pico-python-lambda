@@ -1,31 +1,77 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/configuration-reference
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/jobs-steps/#jobs-overview & https://circleci.com/docs/configuration-reference/#jobs
-jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/executor-intro/ & https://circleci.com/docs/configuration-reference/#executor-job
+executors:
+  amd64-executor:
     docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:current
+      - image: circleci/python:3.12  # Use CircleCI's Docker image for amd64 builds
 
-    # Add steps to the job
-    # See: https://circleci.com/docs/jobs-steps/#steps-overview & https://circleci.com/docs/configuration-reference/#steps
+  arm64-executor:
+    machine:
+      image: ubuntu-2004:2022.04  # Use machine executor for ARM64 builds (ARM instances)
+
+jobs:
+  build:
+    # The job will run on the executor depending on the architecture
+    parameters:
+      platform:
+        type: string
+      base_version:
+        type: string
+    executor: << matrix.platform >>  # This selects the platform (arm64 or amd64) dynamically
+
     steps:
-      # Checkout the code as the first step.
       - checkout
-      - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
 
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
+      - setup_remote_docker  # Required to use Docker in CircleCI
+
+      - run:
+          name: Log in to Docker Hub
+          command: echo "${DOCKER_HUB_TOKEN}" | docker login -u "${DOCKER_HUB_USERNAME}" --password-stdin
+
+      - run:
+          name: Build and Push Docker Image
+          command: |
+            BASE_IMAGE_TYPE=$(echo "<< parameters.base_version >>" | cut -d'-' -f1)
+            BASE_IMAGE_VERSION=$(echo "<< parameters.base_version >>" | cut -d'-' -f2)
+            DOCKERFILE_DIR="${BASE_IMAGE_TYPE}"
+            IMAGE_BASE_NAME="<< pipeline.parameters.docker_repo >>"
+            OVERALL_TAG="3.12-<< parameters.base_version >>"
+            MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
+
+            if [[ "<< parameters.base_version >>" == "alpine-"* ]]; then
+              LATEST_TAG="${IMAGE_BASE_NAME}:latest"
+              docker buildx build --push --platform << parameters.platform >> --tag $MAIN_TAG --tag $LATEST_TAG \
+                --build-arg PYTHON_VERSION=3.12 \
+                --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
+                -f ${DOCKERFILE_DIR}/Dockerfile .
+            else
+              docker buildx build --push --platform << parameters.platform >> --tag $MAIN_TAG \
+                --build-arg PYTHON_VERSION=3.12 \
+                --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
+                -f ${DOCKERFILE_DIR}/Dockerfile .
+            fi
+
 workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
+  version: 2
+  build_and_push:
     jobs:
-      - say-hello
+      - build:
+          name: Build and Push Alpine AMD64
+          platform: amd64-executor
+          base_version: alpine-3.19
+
+      - build:
+          name: Build and Push Alpine ARM64
+          platform: arm64-executor
+          base_version: alpine-3.19
+
+      - build:
+          name: Build and Push Ubuntu AMD64
+          platform: amd64-executor
+          base_version: ubuntu-22.04
+
+      - build:
+          name: Build and Push Ubuntu ARM64
+          platform: arm64-executor
+          base_version: ubuntu-22.04
+          
