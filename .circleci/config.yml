@@ -17,12 +17,16 @@ jobs:
       base_version:
         type: string
 
-    executor: "<< parameters.platform >>"  # This will dynamically choose between amd64 or arm64
+    # Dynamically choose between the executors for ARM64 or AMD64
+    executor: "<< parameters.platform >>"
 
     steps:
       - checkout
 
-      - setup_remote_docker  # Required to use Docker in CircleCI
+      - run:
+          name: "Check if ARM64 requires setup_remote_docker"
+          when: << parameters.platform >> == "amd64-executor"
+          command: setup_remote_docker
 
       - run:
           name: Build Docker Image
@@ -63,3 +67,4 @@ workflows:
           name: Build Ubuntu ARM64
           platform: arm64-executor
           base_version: ubuntu-22.04
+          
