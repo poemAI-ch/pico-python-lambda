@@ -3,9 +3,8 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main
-    tags:
-      - "*"
+      - only_test_actions_branch
+    
 
 env:
   DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
