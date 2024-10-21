@@ -69,11 +69,13 @@ jobs:
           sleep 10
 
           # Retry logic for inspecting the image digest
-          retries=5
+          retries=8
           while [ $retries -gt 0 ]; do
+              echo "Trying to get the digest for $MAIN_TAG"
               digest=$(docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2)
               if [ -n "$digest" ]; then
                   echo "$digest" > digest-${{ matrix.platform }}.txt
+                  echo "Digest for $MAIN_TAG is $digest"
                   break
               fi
               echo "Retrying digest retrieval in 10 seconds..."
