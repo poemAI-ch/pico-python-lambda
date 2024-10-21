@@ -7,7 +7,7 @@ executors:
 
   arm64-executor:
     machine:
-      image: ubuntu-2004:2022.04  # Use machine executor for ARM64 builds (native ARM instances)
+      resource_class: arm.medium  # Use the correct resource class for ARM64
 
 jobs:
   build_amd64:
@@ -38,7 +38,7 @@ jobs:
 
   build_arm64:
     machine:
-      image: ubuntu-2004:2022.04  # Native ARM64 machine
+      resource_class: arm.medium  # Use the correct resource class for ARM64
     parameters:
       base_version:
         type: string
