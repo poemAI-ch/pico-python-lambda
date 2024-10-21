@@ -8,7 +8,7 @@ on:
       - "*"
 
 env:
-  DOCKER_HUB_USERNAME: ${{ vars.DOCKER_HUB_USERNAME }}
+  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
   DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
 
 jobs:
@@ -17,14 +17,15 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.12"]
-        base_version: ["alpine-3.19", "ubuntu-22.04"]
+        # base_version: ["alpine-3.19", "ubuntu-22.04"]
+        base_version: ["ubuntu-22.04"] # for faster testing, only build ubuntu
         platform: ["linux/amd64", "linux/arm64"]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Log in to Docker Hub
-        run: echo "${{ env.DOCKER_HUB_TOKEN }}" | docker login -u "${{ env.DOCKER_HUB_USERNAME }}" --password-stdin
+        run: echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -39,15 +40,13 @@ jobs:
           BASE_IMAGE_VERSION=$(echo "${{ matrix.base_version }}" | cut -d'-' -f2)
           DOCKERFILE_DIR="${BASE_IMAGE_TYPE}"
           PROJECT_NAME="${GITHUB_REPOSITORY#*/}"
-          COMMIT_HASH_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           IMAGE_BASE_NAME="${DOCKER_HUB_USERNAME}/${PROJECT_NAME}"
-          echo "IMAGE_BASE_NAME=${IMAGE_BASE_NAME}"
           OVERALL_TAG="${{ matrix.python_version }}-${{ matrix.base_version }}"
           MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
 
           # Tag 'latest' only for Alpine builds
           if [[ "${{ matrix.base_version }}" == "alpine-"* ]]; then
-            LATEST_TAG="${IMAGE_BASE_NAME}:latest"
+            LATEST_TAG="${IMAGE_BASE_NAME}:latest-github"
             echo "Building and pushing tags: $MAIN_TAG and $LATEST_TAG"
             docker buildx build --push \
               --tag $MAIN_TAG --tag $LATEST_TAG --platform ${{ matrix.platform }} \
@@ -63,7 +62,16 @@ jobs:
               --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
               -f ${DOCKERFILE_DIR}/Dockerfile \
               .
-          fi
+
+          # Store the digest of the built image
+          digest=$(docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2)
+          echo "$digest" > digest-${{ matrix.platform }}.txt
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v3
+        with:
+          name: digest-${{ matrix.platform }}
+          path: digest-${{ matrix.platform }}.txt
 
   # This second job combines the images into a multi-platform manifest
   create-manifest:
@@ -77,8 +85,19 @@ jobs:
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
 
-      - name: Create a new builder
-        run: docker buildx create --use --name mybuilder
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Download digests
+        uses: actions/download-artifact@v3
+        with:
+          name: digest-linux/amd64
+          path: .
+      - name: Download digests
+        uses: actions/download-artifact@v3
+        with:
+          name: digest-linux/arm64
+          path: .
 
       - name: Create and push multi-platform manifest
         run: |
@@ -88,15 +107,18 @@ jobs:
           OVERALL_TAG="${{ matrix.python_version }}-${{ matrix.base_version }}"
           MAIN_TAG="${IMAGE_BASE_NAME}:${OVERALL_TAG}"
 
+          # Read the digests from files
+          digest_amd64=$(cat digest-linux/amd64.txt)
+          digest_arm64=$(cat digest-linux/arm64.txt)
+
           # Always combine the platforms into a manifest for each base image
           docker buildx imagetools create --tag $MAIN_TAG \
-            ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/amd64 \
-            ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/arm64
+            ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
+            ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
 
           # Only create the 'latest' tag for Alpine builds
           if [[ "${{ matrix.base_version }}" == "alpine-"* ]]; then
-            LATEST_TAG="${IMAGE_BASE_NAME}:latest"
+            LATEST_TAG="${IMAGE_BASE_NAME}:latest-github"
             docker buildx imagetools create --tag $LATEST_TAG \
-              ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/amd64 \
-              ${IMAGE_BASE_NAME}:${OVERALL_TAG}-linux/arm64
-          fi
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
+              ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
