@@ -62,10 +62,23 @@ jobs:
               --build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION} \
               -f ${DOCKERFILE_DIR}/Dockerfile \
               .
-          fi
-          # Store the digest of the built image
-          digest=$(docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2)
-          echo "$digest" > digest-${{ matrix.platform }}.txt
+
+          # Wait a few seconds to ensure the image is pushed to Docker Hub
+          echo "Waiting for Docker Hub to register the image..."
+          sleep 10
+
+          # Retry logic for inspecting the image digest
+          retries=5
+          while [ $retries -gt 0 ]; do
+              digest=$(docker inspect --format='{{index .RepoDigests 0}}' ${MAIN_TAG} | cut -d'@' -f2)
+              if [ -n "$digest" ]; then
+                  echo "$digest" > digest-${{ matrix.platform }}.txt
+                  break
+              fi
+              echo "Retrying digest retrieval in 10 seconds..."
+              sleep 10
+              retries=$((retries - 1))
+          done
 
       - name: Upload digest
         uses: actions/upload-artifact@v3
@@ -93,7 +106,6 @@ jobs:
         with:
           name: digest-linux/amd64
           path: .
-
       - name: Download digests for arm64
         uses: actions/download-artifact@v3
         with:
@@ -124,3 +136,5 @@ jobs:
               ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_amd64} \
               ${IMAGE_BASE_NAME}:${OVERALL_TAG}@${digest_arm64}
           fi
+
+# End of file
