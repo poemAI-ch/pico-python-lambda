@@ -63,6 +63,7 @@ jobs:
               -f ${DOCKERFILE_DIR}/Dockerfile \
               .
 
+          fi
           # Wait a few seconds to ensure the image is pushed to Docker Hub
           echo "Waiting for Docker Hub to register the image..."
           sleep 10
