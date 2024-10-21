@@ -147,12 +147,12 @@ workflows:
 
       - build_amd64:
           name: Build Ubuntu AMD64
-          base_version: ubuntu-22.04
+          base_version: ubuntu-24.04
           docker_repo: empoemai/pico-python-lambda
 
       - build_arm64:
           name: Build Ubuntu ARM64
-          base_version: ubuntu-22.04
+          base_version: ubuntu-24.04
           docker_repo: empoemai/pico-python-lambda
 
       # Create and push multi-platform manifests
@@ -166,9 +166,8 @@ workflows:
 
       - create_manifest:
           name: Create Manifest for Ubuntu
-          base_version: ubuntu-22.04
+          base_version: ubuntu-24.04
           docker_repo: empoemai/pico-python-lambda
           requires:
             - Build Ubuntu AMD64
             - Build Ubuntu ARM64
-            

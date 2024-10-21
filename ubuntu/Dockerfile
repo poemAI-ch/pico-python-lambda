@@ -1,5 +1,5 @@
 ARG PYTHON_VERSION=3.12
-ARG BASE_IMAGE_VERSION=22.04
+ARG BASE_IMAGE_VERSION=24.04
 
 # Base AWS Lambda image (Amazon Lambda runtime)
 FROM public.ecr.aws/lambda/python:${PYTHON_VERSION} AS aws_lambda_base
@@ -28,14 +28,19 @@ ENV PATH="/venv/bin:$PATH"
 # Upgrade pip and install AWS Lambda Runtime Interface Client (RIC)
 RUN pip install --upgrade pip && pip install awslambdaric
 
-# Stage 2: Final image using official Python base image
-FROM python:${PYTHON_VERSION}-slim-bullseye AS final
+# Stage 2: Final image using ubuntu Python base image
+FROM ubuntu:${BASE_IMAGE_VERSION} as final_image
 
-# Install runtime components for Lambda runtime emulator
-RUN apt-get update && apt-get install -y binutils && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+python3=${PYTHON_VERSION}* \
+python3-venv \
+python3-pip \
+binutils  && rm -rf /var/lib/apt/lists/* 
+
 
 # Copy virtual environment from the previous stage
 COPY --from=python_lambda_base /venv /venv
+ENV PATH="/venv/bin:$PATH"
 
 # Copy AWS Lambda Runtime Interface Emulator from the AWS base image
 COPY --from=aws_lambda_base /usr/local/bin/aws-lambda-rie /usr/local/bin/aws-lambda-rie
